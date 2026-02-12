@@ -12,4 +12,5 @@ export interface SchemaKey_I {
 export enum Currency_E {
   USD = "USD",
   BS = "BS",
+  COP = "COP",
 }
