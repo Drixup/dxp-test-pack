@@ -1,0 +1,56 @@
+name: Publish (develop -> develop tag)
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-develop
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          registry-url: https://npm.pkg.github.com
+          scope: "@drixup"
+          cache: "pnpm"
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          pnpm barrels
+          pnpm build
+
+      # Genera una versión única tipo: 1.0.364-develop.123 (no se commitea)
+      - name: Set pre-release version (develop)
+        run: |
+          base=$(node -p "require('./package.json').version")
+          pre="${base}-develop.${GITHUB_RUN_NUMBER}"
+          echo "Using version: $pre"
+          node -e "const fs=require('fs'); const p=require('./package.json'); p.version='${pre}'; fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');"
+
+      - name: Publish to GitHub Packages (dist-tag develop)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --tag develop --access=restricted

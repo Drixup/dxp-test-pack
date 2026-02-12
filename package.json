@@ -1,0 +1,43 @@
+{
+  "name": "@drixup/dxp-test-pack",
+  "version": "0.0.0",
+  "description": "---",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "homepage": "https://github.com/drixup/dxp-test-pack#readme",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "local-build": "pnpm barrels && pnpm build",
+    "barrels": "barrelsby --config barrelsby.json",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drixup/dxp-dev-services.git"
+  },
+  "license": "ISC",
+  "keywords": [
+    "drixup",
+    "lex-academy",
+    "luiexplica"
+  ],
+  "author": "Alvaro Segovia",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "devDependencies": {},
+  "peerDependencies": {
+    "barrelsby": "^2.8.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "@formkit/tempo": "^0.1.2",
+    "rxjs": "^7.8.2",
+    "typescript": "^5.8.2"
+  },
+  "packageManager": "pnpm@10.12.3+sha512.467df2c586056165580ad6dfb54ceaad94c5a30f80893ebdec5a44c5aa73c205ae4a5bb9d5ed6bb84ea7c249ece786642bbb49d06a307df218d03da41c317417"
+}

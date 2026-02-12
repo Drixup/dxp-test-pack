@@ -1,0 +1,65 @@
+name: Publish (master -> latest)
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: publish-master
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    # Evita loop cuando el propio workflow hace commit con [skip ci]
+    if: >
+      github.event_name != 'push' ||
+      !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          registry-url: https://npm.pkg.github.com
+          scope: "@drixup"
+          cache: "pnpm"
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          pnpm barrels
+          pnpm build
+
+      # Bump de versión estable (patch) SIN ceros a la izquierda (SemVer)
+      - name: Bump patch version
+        run: |
+          npm version patch --no-git-tag-version
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json pnpm-lock.yaml
+          git commit -m "chore: bump version [skip ci]"
+          git push origin HEAD:master
+
+      - name: Publish to GitHub Packages (latest)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --access=restricted
