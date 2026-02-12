@@ -1,0 +1,7 @@
+{
+  "directory": "./src",
+  "delete": true,
+  "singleQuotes": true,
+  "header": "// Generado automáticamente por barrelsby\n",
+  "location": "top"
+}

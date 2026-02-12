@@ -1,0 +1,68 @@
+name: Publish (master -> latest)
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: publish-master
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    # Evita loop cuando el workflow hace commit con [skip ci]
+    if: >
+      github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TOKEN_GITHUB }}
+
+      - name: Setup Node.js 22.16.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          pnpm barrels
+          pnpm build
+
+      - name: Auth to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+        run: |
+          echo "@drixup:registry=https://npm.pkg.github.com/" > ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+
+      # Bump estable en workspace (sin tag git automático)
+      - name: Bump patch version (stable)
+        run: npm version patch --no-git-tag-version
+
+      # Publica latest (por defecto)
+      - name: Publish Package (latest)
+        run: npm publish --access=restricted
+
+      # Solo si publish pasó, persistimos el bump en git
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json pnpm-lock.yaml
+          git commit -m "chore: bump version [skip ci]"
+          git push origin HEAD:master
