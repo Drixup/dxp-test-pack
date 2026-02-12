@@ -14,11 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-publish:
-    # evita loop cuando el workflow hace commit con [skip ci]
+  publish:
+    # Evita loop cuando el workflow hace commit con [skip ci]
     if: >
-      github.event_name != 'push' ||
-      !contains(github.event.head_commit.message, '[skip ci]')
+      github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: ubuntu-22.04
 
     steps:
@@ -36,14 +35,13 @@ jobs:
       - name: Enable pnpm
         run: corepack enable pnpm
 
-      - name: Install Node.js Dependencies
+      - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Barrels
-        run: pnpm barrels
-
-      - name: Build Assets
-        run: pnpm build
+      - name: Build
+        run: |
+          pnpm barrels
+          pnpm build
 
       - name: Auth to GitHub Packages
         env:
@@ -52,9 +50,15 @@ jobs:
           echo "@drixup:registry=https://npm.pkg.github.com/" > ~/.npmrc
           echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
 
+      # Bump estable en workspace (sin tag git automático)
       - name: Bump patch version (stable)
         run: npm version patch --no-git-tag-version
 
+      # Publica latest (por defecto)
+      - name: Publish Package (latest)
+        run: npm publish --access=restricted
+
+      # Solo si publish pasó, persistimos el bump en git
       - name: Commit version bump
         run: |
           git config user.name "github-actions[bot]"
@@ -62,6 +66,3 @@ jobs:
           git add package.json pnpm-lock.yaml
           git commit -m "chore: bump version [skip ci]"
           git push origin HEAD:master
-
-      - name: Publish Package to GitHub Packages (latest)
-        run: npm publish --access=restricted

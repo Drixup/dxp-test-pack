@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/drixup/dxp-dev-services.git"
+    "url": "git+https://github.com/drixup/dxp-test-pack.git"
   },
   "license": "ISC",
   "keywords": [

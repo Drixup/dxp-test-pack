@@ -14,8 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-publish:
+  publish:
     runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -31,21 +32,13 @@ jobs:
       - name: Enable pnpm
         run: corepack enable pnpm
 
-      - name: Install Node.js Dependencies
+      - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Barrels
-        run: pnpm barrels
-
-      - name: Build Assets
-        run: pnpm build
-
-      - name: Set pre-release version (develop)
+      - name: Build
         run: |
-          base=$(node -p "require('./package.json').version")
-          pre="${base}-develop.${GITHUB_RUN_NUMBER}"
-          echo "Using version: $pre"
-          node -e "const fs=require('fs'); const p=require('./package.json'); p.version='${pre}'; fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');"
+          pnpm barrels
+          pnpm build
 
       - name: Auth to GitHub Packages
         env:
@@ -54,5 +47,33 @@ jobs:
           echo "@drixup:registry=https://npm.pkg.github.com/" > ~/.npmrc
           echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
 
-      - name: Publish Package to GitHub Packages (tag develop)
+      - name: Set develop pre-release version based on master
+        run: |
+          git fetch origin master --depth=1
+          export MASTER_VERSION=$(node -p "JSON.parse(require('child_process').execSync('git show origin/master:package.json',{encoding:'utf8'})).version")
+          echo "Master version: $MASTER_VERSION"
+
+          node -e "
+            const fs=require('fs');
+            const master=process.env.MASTER_VERSION;
+            const run=process.env.GITHUB_RUN_NUMBER;
+
+            const m=master.match(/^(\\d+)\\.(\\d+)\\.(\\d+)/);
+            if(!m){ console.error('Invalid master version:', master); process.exit(1); }
+
+            const major=Number(m[1]);
+            const minor=Number(m[2]);
+            const patch=Number(m[3])+1;
+
+            const next=\`\${major}.\${minor}.\${patch}\`;
+            const pre=\`\${next}-develop.\${run}\`;
+
+            const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.version=pre;
+            fs.writeFileSync('package.json', JSON.stringify(pkg,null,2)+'\\n');
+
+            console.log('Publish version:', pre);
+          "
+
+      - name: Publish Package (tag develop)
         run: npm publish --access=restricted --tag develop
