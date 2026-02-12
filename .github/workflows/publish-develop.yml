@@ -1,4 +1,4 @@
-name: Publish (develop -> develop tag)
+name: Publish (develop -> tag develop)
 
 on:
   push:
@@ -14,35 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  publish:
+  build-and-publish:
     runs-on: ubuntu-22.04
-
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.TOKEN_GITHUB }}
 
-      - name: Setup Node
+      - name: Setup Node.js 22.16.0
         uses: actions/setup-node@v4
         with:
           node-version: 22.16.0
-          registry-url: https://npm.pkg.github.com
-          scope: "@drixup"
-          cache: "pnpm"
 
       - name: Enable pnpm
         run: corepack enable pnpm
 
-      - name: Install
+      - name: Install Node.js Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: |
-          pnpm barrels
-          pnpm build
+      - name: Build Barrels
+        run: pnpm barrels
 
-      # Genera una versión única tipo: 1.0.364-develop.123 (no se commitea)
+      - name: Build Assets
+        run: pnpm build
+
       - name: Set pre-release version (develop)
         run: |
           base=$(node -p "require('./package.json').version")
@@ -50,7 +47,12 @@ jobs:
           echo "Using version: $pre"
           node -e "const fs=require('fs'); const p=require('./package.json'); p.version='${pre}'; fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');"
 
-      - name: Publish to GitHub Packages (dist-tag develop)
+      - name: Auth to GitHub Packages
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish --tag develop --access=restricted
+          NODE_AUTH_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+        run: |
+          echo "@drixup:registry=https://npm.pkg.github.com/" > ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+
+      - name: Publish Package to GitHub Packages (tag develop)
+        run: npm publish --access=restricted --tag develop
