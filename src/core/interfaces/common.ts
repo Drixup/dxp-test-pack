@@ -16,3 +16,4 @@ export enum Currency_E {
 }
 
 export const algunacosa = 12345;
+export const algo = '12345';
