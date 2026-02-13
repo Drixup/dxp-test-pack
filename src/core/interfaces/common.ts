@@ -14,3 +14,5 @@ export enum Currency_E {
   BS = "BS",
   COP = "COP",
 }
+
+export const algunacosa = 12345;
