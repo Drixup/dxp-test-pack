@@ -13,3 +13,5 @@ export enum Currency_E {
   USD = "USD",
   BS = "BS",
 }
+
+export const algo = '12345';
