@@ -1,0 +1,95 @@
+name: Publish (warm/* -> tag warm-dxp-ISSUE)
+
+on:
+  push:
+    branches:
+      - "warm/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-warm-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TOKEN_GITHUB }}
+
+      - name: Setup Node.js 22.16.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          pnpm barrels
+          pnpm build
+
+      - name: Auth to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+        run: |
+          echo "@drixup:registry=https://npm.pkg.github.com/" > ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+
+      # warm/dxp-5542 -> warm-dxp-5542
+      - name: Derive dist-tag from branch name
+        id: meta
+        run: |
+          raw="${GITHUB_REF_NAME#warm/}"     # dxp-5542
+          raw=$(echo "$raw" | tr '[:upper:]' '[:lower:]' | tr '/' '-' )
+          echo "dist_tag=warm-${raw}" >> "$GITHUB_OUTPUT"
+          echo "Using dist-tag: warm-${raw}"
+
+      # base = nextPatch(master)
+      # version = base-<dist_tag>.<run>
+      # Ej: 0.0.3-warm-dxp-5542.17
+      - name: Set warm pre-release version based on master
+        run: |
+          git fetch origin master --depth=1
+          export MASTER_VERSION=$(node -p "JSON.parse(require('child_process').execSync('git show origin/master:package.json',{encoding:'utf8'})).version")
+          export DIST_TAG="${{ steps.meta.outputs.dist_tag }}"
+          echo "Master version: $MASTER_VERSION"
+          echo "Dist tag: $DIST_TAG"
+
+          node -e "
+            const fs=require('fs');
+            const master=process.env.MASTER_VERSION;
+            const distTag=process.env.DIST_TAG;
+            const run=process.env.GITHUB_RUN_NUMBER;
+
+            const m=master.match(/^(\\d+)\\.(\\d+)\\.(\\d+)/);
+            if(!m){ console.error('Invalid master version:', master); process.exit(1); }
+
+            const major=Number(m[1]);
+            const minor=Number(m[2]);
+            const patch=Number(m[3]) + 1;
+
+            const base=\`\${major}.\${minor}.\${patch}\`;
+            const pre=\`\${base}-\${distTag}.\${run}\`;
+
+            const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.version=pre;
+            fs.writeFileSync('package.json', JSON.stringify(pkg,null,2)+'\\n');
+
+            console.log('Publish version:', pre);
+          "
+
+      - name: Publish Package (warm dist-tag)
+        run: npm publish --access=restricted --tag "${{ steps.meta.outputs.dist_tag }}"

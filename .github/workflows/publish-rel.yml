@@ -1,0 +1,96 @@
+name: Publish (rel/* -> tag rel-dxp-VERSION)
+
+on:
+  push:
+    branches:
+      - "rel/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-rel-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TOKEN_GITHUB }}
+
+      - name: Setup Node.js 22.16.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          pnpm barrels
+          pnpm build
+
+      - name: Auth to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+        run: |
+          echo "@drixup:registry=https://npm.pkg.github.com/" > ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+
+      # rel/dxp-0.1.0 -> dist-tag rel-dxp-0.1.0
+      # y target version = 0.1.0
+      - name: Derive dist-tag and target version from branch name
+        id: meta
+        run: |
+          raw="${GITHUB_REF_NAME#rel/}"      # dxp-0.1.0
+          raw=$(echo "$raw" | tr '[:upper:]' '[:lower:]' | tr '/' '-' )
+          dist_tag="rel-${raw}"
+          target="${raw#dxp-}"              # 0.1.0 (si no tiene dxp-, queda igual)
+
+          # Validación básica semver X.Y.Z
+          if ! echo "$target" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Invalid release target version from branch: '$GITHUB_REF_NAME' -> '$target'"
+            echo "Expected branch like: rel/dxp-1.2.3"
+            exit 1
+          fi
+
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "Using dist-tag: $dist_tag"
+          echo "Target version: $target"
+
+      # version = target-<dist_tag>.<run>
+      # Ej: 0.1.0-rel-dxp-0.1.0.12
+      - name: Set release pre-release version (from rel branch)
+        run: |
+          export DIST_TAG="${{ steps.meta.outputs.dist_tag }}"
+          export TARGET="${{ steps.meta.outputs.target }}"
+
+          node -e "
+            const fs=require('fs');
+            const distTag=process.env.DIST_TAG;
+            const target=process.env.TARGET;
+            const run=process.env.GITHUB_RUN_NUMBER;
+
+            const pre=\`\${target}-\${distTag}.\${run}\`;
+
+            const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.version=pre;
+            fs.writeFileSync('package.json', JSON.stringify(pkg,null,2)+'\\n');
+
+            console.log('Publish version:', pre);
+          "
+
+      - name: Publish Package (release dist-tag)
+        run: npm publish --access=restricted --tag "${{ steps.meta.outputs.dist_tag }}"
