@@ -1,4 +1,4 @@
-name: Publish (feat/* -> tag dxp-feat-ISSUE)
+name: Publish (feat/* -> tag feat-dxp-ISSUE)
 
 on:
   push:
@@ -49,20 +49,19 @@ jobs:
           echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
 
       # Deriva dist-tag fijo desde la rama:
-      # feat/dxp-5542 -> dxp-feat-5542
+      # feat/dxp-5542 -> feat-dxp-5542
       - name: Derive dist-tag from branch name
         id: meta
         run: |
           raw="${GITHUB_REF_NAME#feat/}"     # dxp-5542
-          raw="${raw#dxp-}"                  # 5542 (si no existe dxp-, queda igual)
           raw=$(echo "$raw" | tr '[:upper:]' '[:lower:]' | tr '/' '-' )
-          echo "dist_tag=dxp-feat-${raw}" >> "$GITHUB_OUTPUT"
-          echo "Using dist-tag: dxp-feat-${raw}"
+          echo "dist_tag=feat-${raw}" >> "$GITHUB_OUTPUT"
+          echo "Using dist-tag: feat-${raw}"
 
       # Versión pre-release única basada en master:
       # base = nextPatch(master)
       # version = base-<dist_tag>.<run>
-      # Ej: 0.0.3-dxp-feat-5542.17
+      # Ej: 0.0.3-feat-dxp-5542.17
       - name: Set feature pre-release version based on master
         run: |
           git fetch origin master --depth=1
